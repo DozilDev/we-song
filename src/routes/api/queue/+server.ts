@@ -34,7 +34,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		videoId,
 		title,
 		addedBy: name || 'Anonymous',
-		addedAt: Date.now()
+		addedAt: Date.now(),
+		upvotes: []
 	};
 
 	if (!state.nowPlaying) {
@@ -45,4 +46,23 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	return json(state);
+};
+
+export const DELETE: RequestHandler = async ({ request }) => {
+	const { id, name } = (await request.json()) as { id: string; name: string };
+
+	const songIndex = state.queue.findIndex((s) => s.id === id);
+	if (songIndex === -1) {
+		throw error(404, 'Song not found in queue');
+	}
+
+	const song = state.queue[songIndex];
+
+	// Allow removal if the requester added the song or is the host
+	if (song.addedBy === name || state.host === name) {
+		state.queue.splice(songIndex, 1);
+		return json(state);
+	}
+
+	throw error(403, 'Unauthorized to remove this song');
 };

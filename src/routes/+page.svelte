@@ -165,6 +165,46 @@
 		if (res.ok) appState = await res.json();
 	}
 
+	async function voteSong(id: string) {
+		if (!nameSet) return;
+		try {
+			const res = await fetch('/api/queue/vote', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id, name: myName })
+			});
+			if (res.ok) appState = await res.json();
+		} catch {}
+	}
+
+	async function deleteSong(id: string) {
+		if (!nameSet) return;
+		try {
+			const res = await fetch('/api/queue', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id, name: myName })
+			});
+			if (res.ok) appState = await res.json();
+		} catch {}
+	}
+
+	let draggedIndex = $state<number | null>(null);
+	let hoveringIndex = $state<number | null>(null);
+
+	async function reorderSong(fromIndex: number, toIndex: number) {
+		if (!nameSet || !isHost) return;
+		if (fromIndex === toIndex) return;
+		try {
+			const res = await fetch('/api/queue/reorder', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ fromIndex, toIndex, name: myName })
+			});
+			if (res.ok) appState = await res.json();
+		} catch {}
+	}
+
 	onMount(() => {
 		const saved = localStorage.getItem('we-song-name');
 		if (saved) {
@@ -337,7 +377,38 @@
 			{:else}
 				<ul class="space-y-2">
 					{#each appState.queue as song, i (song.id)}
-						<li class="flex items-center gap-3 rounded-lg bg-zinc-800 p-3">
+						<li
+							draggable={isHost}
+							ondragstart={(e) => {
+								if (!isHost) return;
+								draggedIndex = i;
+								e.dataTransfer?.setData('text/plain', i.toString());
+							}}
+							ondragover={(e) => {
+								if (!isHost || draggedIndex === null) return;
+								e.preventDefault();
+								hoveringIndex = i;
+							}}
+							ondragleave={() => {
+								if (hoveringIndex === i) hoveringIndex = null;
+							}}
+							ondragend={() => {
+								draggedIndex = null;
+								hoveringIndex = null;
+							}}
+							ondrop={(e) => {
+								e.preventDefault();
+								if (draggedIndex !== null && isHost) {
+									reorderSong(draggedIndex, i);
+								}
+								draggedIndex = null;
+								hoveringIndex = null;
+							}}
+							class="flex items-center gap-3 rounded-lg p-3 transition-all duration-200 select-none
+								{isHost ? 'cursor-grab active:cursor-grabbing' : ''}
+								{draggedIndex === i ? 'opacity-40 bg-zinc-800/20 border border-dashed border-zinc-700' : 'bg-zinc-800'}
+								{hoveringIndex === i && draggedIndex !== i ? 'border-2 border-dashed border-violet-500 bg-zinc-900/55 scale-[0.98]' : 'border border-transparent'}"
+						>
 							<span class="w-5 shrink-0 text-center text-xs text-zinc-600">{i + 1}</span>
 							<div class="min-w-0 flex-1">
 								<a
@@ -349,6 +420,50 @@
 									{song.title}
 								</a>
 								<p class="text-xs text-zinc-600">by {song.addedBy}</p>
+							</div>
+
+							<!-- Action Buttons -->
+							<div class="flex items-center gap-2 shrink-0">
+								<!-- Host Reorder Controls -->
+								{#if isHost}
+									<button
+										onclick={() => reorderSong(i, i - 1)}
+										disabled={i === 0}
+										class="flex items-center justify-center h-8 w-8 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:pointer-events-none rounded-lg text-xs transition-colors cursor-pointer text-zinc-400 hover:text-white"
+										title="Move Up"
+									>
+										▲
+									</button>
+									<button
+										onclick={() => reorderSong(i, i + 1)}
+										disabled={i === appState.queue.length - 1}
+										class="flex items-center justify-center h-8 w-8 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:pointer-events-none rounded-lg text-xs transition-colors cursor-pointer text-zinc-400 hover:text-white"
+										title="Move Down"
+									>
+										▼
+									</button>
+								{/if}
+
+								<!-- Upvote Button -->
+								<button
+									onclick={() => voteSong(song.id)}
+									class="flex items-center justify-center h-8 px-3 gap-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-semibold hover:bg-zinc-700 hover:text-white transition-colors cursor-pointer {song.upvotes?.includes(myName) ? '!bg-violet-600 !text-white' : ''}"
+									title="Upvote song"
+								>
+									<span>▲</span>
+									<span>{song.upvotes?.length ?? 0}</span>
+								</button>
+
+								<!-- Delete Button -->
+								{#if song.addedBy === myName || isHost}
+									<button
+										onclick={() => deleteSong(song.id)}
+										class="flex items-center justify-center h-8 w-8 bg-zinc-800 hover:bg-red-950 text-zinc-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+										title="Delete song"
+									>
+										🗑️
+									</button>
+								{/if}
 							</div>
 						</li>
 					{/each}

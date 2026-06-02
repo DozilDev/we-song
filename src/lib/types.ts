@@ -5,6 +5,7 @@ export interface Song {
 	title: string;
 	addedBy: string;
 	addedAt: number;
+	upvotes?: string[];
 }
 
 export interface AppState {
