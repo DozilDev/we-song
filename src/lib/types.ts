@@ -15,6 +15,11 @@ export interface Song {
 	addedAt: number;
 	/** Session ids that have upvoted. Never serialized (only the count is). */
 	upvotes: string[];
+	/**
+	 * Playback length in seconds, learned from the host's player while the song
+	 * plays (the oEmbed endpoint doesn't expose it). `null` until known.
+	 */
+	durationSec: number | null;
 }
 
 export interface Host {
@@ -22,11 +27,56 @@ export interface Host {
 	name: string;
 }
 
+/**
+ * A song that finished playing. Deliberately omits session ids and votes — it
+ * is a display-only record, and a re-add re-attributes the song to the re-adder.
+ */
+export interface HistoryEntry {
+	videoId: string;
+	url: string;
+	title: string;
+	addedBy: string;
+	playedAt: number;
+	durationSec: number | null;
+}
+
+/** A chat message. `fromSid` authorizes the `mine` flag and is never serialized. */
+export interface ChatItem {
+	id: string;
+	from: string;
+	fromSid: string;
+	text: string;
+	at: number;
+}
+
+/**
+ * Live playback position, reported by the host and fanned out on a dedicated SSE
+ * event (never via the full-state push). Ephemeral — never persisted.
+ */
+export interface PlaybackProgress {
+	position: number;
+	duration: number;
+	paused: boolean;
+	/** Server-stamped receipt time, so clients can interpolate between updates. */
+	updatedAt: number;
+}
+
+/** A transient emoji reaction. Broadcast on its own SSE event; never stored. */
+export interface ReactionEvent {
+	from: string;
+	emoji: string;
+	at: number;
+}
+
 export interface ServerState {
 	queue: Song[];
 	nowPlaying: Song | null;
 	isPaused: boolean;
 	host: Host | null;
+	history: HistoryEntry[];
+	chat: ChatItem[];
+	/** Live position of the now-playing song. Reset to null on every song change. */
+	progress: PlaybackProgress | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,6 +98,44 @@ export interface SongView {
 	voted: boolean;
 	/** Whether the requesting client added this song (may delete it). */
 	mine: boolean;
+	/** Playback length in seconds, or null if not yet known. */
+	durationSec: number | null;
+}
+
+export interface HistoryEntryView {
+	videoId: string;
+	url: string;
+	title: string;
+	addedBy: string;
+	playedAt: number;
+	durationSec: number | null;
+}
+
+export interface ChatItemView {
+	id: string;
+	from: string;
+	text: string;
+	at: number;
+	/** Whether the requesting client sent this message. */
+	mine: boolean;
+}
+
+/** One person's contribution tallies. Names only — never session ids. */
+export interface StatView {
+	name: string;
+	songsAdded: number;
+	votesReceived: number;
+}
+
+export interface StatsView {
+	/** Name of the person who has added the most songs, or null. */
+	topContributor: string | null;
+	/** Name of the person whose songs earned the most votes, or null. */
+	mostLiked: string | null;
+	/** The requesting client's own tallies. */
+	me: StatView;
+	/** Top contributors by songs added (names only). */
+	leaderboard: StatView[];
 }
 
 export interface AppState {
@@ -58,4 +146,10 @@ export interface AppState {
 	host: string | null;
 	/** Whether the requesting client is the host. */
 	isHost: boolean;
+	/** Most-recently-played songs, newest first. */
+	history: HistoryEntryView[];
+	/** Recent chat messages, oldest first. */
+	chat: ChatItemView[];
+	/** Contribution stats for the room. */
+	stats: StatsView;
 }

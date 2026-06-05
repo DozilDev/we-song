@@ -9,6 +9,7 @@ import {
 	cleanName,
 	withinAddCooldown,
 	markAdded,
+	incSongsAdded,
 	MAX_QUEUE,
 	MAX_TITLE
 } from '$lib/server/state.js';
@@ -89,25 +90,29 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const title = (await fetchTitle(videoId)).slice(0, MAX_TITLE);
+	const displayName = cleanName(name);
 	const song: Song = {
 		id: randomUUID(),
 		url: `https://www.youtube.com/watch?v=${videoId}`,
 		videoId,
 		title,
-		addedBy: cleanName(name),
+		addedBy: displayName,
 		addedBySid: sid,
 		addedAt: Date.now(),
-		upvotes: []
+		upvotes: [],
+		durationSec: null
 	};
 
 	if (!state.nowPlaying) {
 		state.nowPlaying = song;
 		state.isPaused = false;
+		state.progress = null;
 	} else {
 		state.queue.push(song);
 	}
 
 	markAdded(sid, now);
+	incSongsAdded(sid, displayName);
 	persist();
 	notify();
 	return json(serialize(sid));

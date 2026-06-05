@@ -1,6 +1,21 @@
 import { json, error } from '@sveltejs/kit';
-import { state, serialize, isHost, persist, notify } from '$lib/server/state.js';
+import {
+	state,
+	serialize,
+	isHost,
+	persist,
+	notify,
+	pushHistory,
+	addVotesReceived
+} from '$lib/server/state.js';
+import type { Song } from '$lib/types.js';
 import type { RequestHandler } from './$types.js';
+
+/** Archive a finishing song: record it in history and bank its votes. */
+function retire(song: Song): void {
+	pushHistory(song);
+	addVotesReceived(song.addedBySid, song.addedBy, song.upvotes.length);
+}
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const sid = locals.sid;
@@ -19,16 +34,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	switch (action) {
 		case 'skip':
+			if (state.nowPlaying) retire(state.nowPlaying);
 			state.nowPlaying = state.queue.shift() ?? null;
 			state.isPaused = false;
+			state.progress = null;
 			break;
 		case 'pause':
 			if (state.nowPlaying) state.isPaused = !state.isPaused;
 			break;
 		case 'stop':
+			if (state.nowPlaying) retire(state.nowPlaying);
 			state.nowPlaying = null;
 			state.queue = [];
 			state.isPaused = false;
+			state.progress = null;
 			break;
 		default:
 			throw error(400, 'Unknown action');
