@@ -1,6 +1,9 @@
 import { json } from '@sveltejs/kit';
-import { state } from '$lib/server/state.js';
+import { serialize } from '$lib/server/state.js';
+import type { RequestHandler } from './$types.js';
 
-export function GET() {
-	return json(state);
-}
+export const GET: RequestHandler = ({ locals }) => {
+	return json(serialize(locals.sid), {
+		headers: { 'cache-control': 'no-store' }
+	});
+};

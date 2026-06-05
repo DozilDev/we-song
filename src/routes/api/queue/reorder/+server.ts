@@ -1,32 +1,39 @@
 import { json, error } from '@sveltejs/kit';
-import type { RequestEvent } from '@sveltejs/kit';
-import { state } from '$lib/server/state.js';
+import { state, serialize, isHost, persist, notify } from '$lib/server/state.js';
 import type { RequestHandler } from './$types.js';
 
-export const POST: RequestHandler = async ({ request }: RequestEvent) => {
-	const { fromIndex, toIndex, name } = (await request.json()) as {
-		fromIndex: number;
-		toIndex: number;
-		name: string;
-	};
+export const POST: RequestHandler = async ({ request, locals }) => {
+	const sid = locals.sid;
 
-	// Only the host has permission to manually reorder songs in the queue
-	if (!state.host || state.host !== name) {
-		throw error(403, 'Only the host can reorder songs');
+	// Manual reordering is a host-only privilege, authorized by session id.
+	if (!isHost(sid)) throw error(403, 'Only the host can reorder songs');
+
+	let fromIndex: unknown;
+	let toIndex: unknown;
+	try {
+		({ fromIndex, toIndex } = (await request.json()) as {
+			fromIndex?: unknown;
+			toIndex?: unknown;
+		});
+	} catch {
+		throw error(400, 'Invalid request body');
 	}
 
 	if (
-		fromIndex < 0 ||
-		fromIndex >= state.queue.length ||
-		toIndex < 0 ||
-		toIndex >= state.queue.length
+		!Number.isInteger(fromIndex) ||
+		!Number.isInteger(toIndex) ||
+		(fromIndex as number) < 0 ||
+		(fromIndex as number) >= state.queue.length ||
+		(toIndex as number) < 0 ||
+		(toIndex as number) >= state.queue.length
 	) {
 		throw error(400, 'Invalid indices');
 	}
 
-	// Move item from fromIndex to toIndex in the queue array
-	const [movedSong] = state.queue.splice(fromIndex, 1);
-	state.queue.splice(toIndex, 0, movedSong);
+	const [movedSong] = state.queue.splice(fromIndex as number, 1);
+	state.queue.splice(toIndex as number, 0, movedSong);
 
-	return json(state);
+	persist();
+	notify();
+	return json(serialize(sid));
 };

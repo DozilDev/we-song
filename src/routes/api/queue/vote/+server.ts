@@ -1,46 +1,35 @@
 import { json, error } from '@sveltejs/kit';
-import type { RequestEvent } from '@sveltejs/kit';
-import { state } from '$lib/server/state.js';
+import { state, serialize, persist, notify } from '$lib/server/state.js';
 import type { RequestHandler } from './$types.js';
 
-export const POST: RequestHandler = async ({ request }: RequestEvent) => {
-	const { id, name } = (await request.json()) as { id: string; name: string };
+export const POST: RequestHandler = async ({ request, locals }) => {
+	const sid = locals.sid;
 
-	if (!name) {
-		throw error(400, 'Name is required to vote');
+	let id: unknown;
+	try {
+		({ id } = (await request.json()) as { id?: unknown });
+	} catch {
+		throw error(400, 'Invalid request body');
 	}
+
+	if (typeof id !== 'string') throw error(400, 'Song id is required');
 
 	const song = state.queue.find((s) => s.id === id);
-	if (!song) {
-		throw error(404, 'Song not found in queue');
-	}
+	if (!song) throw error(404, 'Song not found in queue');
 
-	// Ensure upvotes array exists
-	if (!song.upvotes) {
-		song.upvotes = [];
-	}
+	// Votes are keyed by session id, so one client = one vote. Toggling removes
+	// it. Renaming can no longer be used to stuff the ballot.
+	const voteIndex = song.upvotes.indexOf(sid);
+	if (voteIndex === -1) song.upvotes.push(sid);
+	else song.upvotes.splice(voteIndex, 1);
 
-	const voteIndex = song.upvotes.indexOf(name);
-	if (voteIndex === -1) {
-		// User has not voted yet, add their name (Upvote)
-		song.upvotes.push(name);
-	} else {
-		// User has already voted, remove their name (Cancel Upvote)
-		song.upvotes.splice(voteIndex, 1);
-	}
-
-	// Re-sort the queue:
-	// 1. By upvote count (descending)
-	// 2. By added time (ascending) to maintain queue fairness
+	// Re-sort: most-upvoted first, ties broken by insertion order (fairness).
 	state.queue.sort((a, b) => {
-		const aVotes = a.upvotes?.length ?? 0;
-		const bVotes = b.upvotes?.length ?? 0;
-
-		if (aVotes !== bVotes) {
-			return bVotes - aVotes;
-		}
+		if (a.upvotes.length !== b.upvotes.length) return b.upvotes.length - a.upvotes.length;
 		return a.addedAt - b.addedAt;
 	});
 
-	return json(state);
+	persist();
+	notify();
+	return json(serialize(sid));
 };

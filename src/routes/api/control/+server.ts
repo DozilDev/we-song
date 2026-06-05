@@ -1,9 +1,21 @@
-import { json } from '@sveltejs/kit';
-import { state } from '$lib/server/state.js';
+import { json, error } from '@sveltejs/kit';
+import { state, serialize, isHost, persist, notify } from '$lib/server/state.js';
 import type { RequestHandler } from './$types.js';
 
-export const POST: RequestHandler = async ({ request }) => {
-	const { action } = (await request.json()) as { action: string };
+export const POST: RequestHandler = async ({ request, locals }) => {
+	const sid = locals.sid;
+
+	// Playback control affects everyone in the room (skip/pause and especially
+	// `stop`, which clears the whole queue). Only the host — who actually plays
+	// the audio — may do it.
+	if (!isHost(sid)) throw error(403, 'Only the host can control playback');
+
+	let action: unknown;
+	try {
+		({ action } = (await request.json()) as { action?: unknown });
+	} catch {
+		throw error(400, 'Invalid request body');
+	}
 
 	switch (action) {
 		case 'skip':
@@ -18,7 +30,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			state.queue = [];
 			state.isPaused = false;
 			break;
+		default:
+			throw error(400, 'Unknown action');
 	}
 
-	return json(state);
+	persist();
+	notify();
+	return json(serialize(sid));
 };
