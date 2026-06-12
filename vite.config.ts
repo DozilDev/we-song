@@ -29,5 +29,10 @@ export default defineConfig({
 			'/static/'
 		]
 	},
-	plugins: [tailwindcss(), sveltekit()]
+	plugins: [tailwindcss(), sveltekit()],
+	// Bundle runtime deps into the adapter-node output so the build stays
+	// self-contained — the Docker runner stage ships no node_modules.
+	ssr: {
+		noExternal: ['qrcode-generator']
+	}
 });
