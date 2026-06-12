@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 # source files that aren't copied yet; the || echo '' fallback already handles
 # this, but skipping is cleaner and faster.
 COPY package.json bun.lock ./
-RUN bun install --ignore-scripts
+RUN bun install
 
 # Expose local vp binary on PATH
 ENV PATH="/app/node_modules/.bin:$PATH"
